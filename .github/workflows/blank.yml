@@ -1,0 +1,82 @@
+!pip install PyPDF2 pytesseract pdf2image
+from PyPDF2 import PdfReader, PdfWriter
+from google.colab import files
+
+# Pobranie pliku
+print("Proszę wybrać plik pdf")
+uploaded = files.upload()
+plik_pdf = next(iter(uploaded))
+
+pdf = PdfReader(plik_pdf)
+
+for i, page in enumerate(pdf.pages):
+    # Obrót strony o 90 stopni w lewo
+    page.rotate(90)
+
+    writer = PdfWriter()
+    writer.add_page(page)
+
+    with open(f'plik{i+1}.pdf', 'wb') as output_pdf:
+        writer.write(output_pdf)
+        print(f'Oddzielono plik{i+1}')
+        files.download(f'plik{i+1}.pdf')
+
+
+!pip install easyocr
+!pip install opencv-python
+!pip install pdf2image
+!pip install PyMuPDF
+
+import easyocr
+import cv2
+import io
+import numpy as np
+from PIL import Image
+import fitz
+import re
+import os
+
+# Inicjalizacja czytnika OCR dla języka polskiego
+reader = easyocr.Reader(['pl'])
+
+def find_name_and_pesel(text):
+    # Ulepszony regex do wykrywania imion
+    name_search = re.search(r"Zaświadcza się, że(?:.*?)\b([A-ZŁŚĆŻŹĄĘÓŃ][a-ząćęłńóśźż]+(?: [A-ZŁŚĆŻŹĄĘÓŃ][a-ząćęłńóśźż]+)?)", text)
+    pesel = re.search(r"\b\d{11}\b", text)
+
+    name = name_search.group(1) if name_search else None
+    return name, pesel.group() if pesel else None
+
+for filename in os.listdir('.'):
+    if filename.endswith(".pdf"):
+        print("Przetwarzanie pliku:", filename)
+
+        # Wyodrębnienie obrazów z pliku PDF
+        doc = fitz.open(filename)
+        images = []
+        for i in range(len(doc)):
+            page = doc.load_page(i)
+            pix = page.get_pixmap()
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            images.append(np.array(img))  # Konwersja na numpy array
+
+        # Wyodrębnienie tekstu z obrazów za pomocą OCR
+        extracted_text = ""
+        for img in images:
+            result = reader.readtext(img)
+            text = ' '.join([res[1] for res in result])
+            extracted_text += text
+
+        # Wyszukiwanie imienia i numeru PESEL
+        name, pesel = find_name_and_pesel(extracted_text)
+
+        if name and pesel:
+            print("Imię:", name)
+            print("Numer PESEL:", pesel)
+
+            # Zmiana nazwy pliku na nazwę z imieniem i PESELEM
+            new_file_name = f"{name.replace(' ', '_')}_{pesel}.pdf" if name else f"Unknown_{pesel}.pdf"
+            os.rename(filename, new_file_name)
+            print("Nazwa pliku zmieniona na:", new_file_name)
+        else:
+            print("Nie znaleziono imienia lub numeru PESEL.")
