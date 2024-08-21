@@ -1,0 +1,59 @@
+!pip install easyocr
+!pip install opencv-python
+!pip install pytesseract
+!pip install pdf2image
+!pip install PyMuPDF
+
+from google.colab import files
+import easyocr
+import cv2
+import io
+import numpy as np
+from PIL import Image
+import fitz
+import re
+import os
+
+# Pobranie pliku PDF
+print("Proszę wybrać plik PDF:")
+uploaded = files.upload()
+plik_pdf = next(iter(uploaded))
+
+# Wyodrębnienie obrazów z pliku PDF
+doc = fitz.open(plik_pdf)
+images = []
+for i in range(len(doc)):
+    page = doc.load_page(i)
+    pix = page.get_pixmap()
+    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+    img_byte_arr = io.BytesIO()
+    img.save(img_byte_arr, format='PNG')
+    img_byte_arr = img_byte_arr.getvalue()
+    images.append(img_byte_arr)
+
+# Wyodrębnienie tekstu z obrazów za pomocą easyocr
+reader = easyocr.Reader(['pl'])
+extracted_text = ""
+for img_bytes in images:
+    img_np = np.frombuffer(img_bytes, np.uint8)
+    img = cv2.imdecode(img_np, cv2.IMREAD_COLOR)
+    result = reader.readtext(img)
+    text = '\n'.join([res[1] for res in result])
+    extracted_text += text + "\n"
+
+# Wyszukiwanie imienia i numeru PESEL
+name_result = re.search(r"[A-Z][a-ząćęłńóśźż]+ [A-Z][a-ząćęłńóśźż]+", extracted_text)
+pesel_result = re.search(r"\b\d{11}\b", extracted_text)
+
+# Wyświetlenie wyników
+if name_result and pesel_result:
+    name = name_result.group()
+    pesel = pesel_result.group()
+    print("Imię:", name)
+    print("Numer PESEL:", pesel)
+    # Zmiana nazwy pliku
+    new_file_name = f"{name.replace(' ', '_')}_{pesel}.pdf"
+    os.rename(plik_pdf, new_file_name)
+    print("Nazwa pliku zmieniona na:", new_file_name)
+else:
+    print("Nie znaleziono imienia lub numeru PESEL.")
