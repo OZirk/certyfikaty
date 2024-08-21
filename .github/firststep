@@ -1,0 +1,22 @@
+!pip install PyPDF2 pytesseract pdf2image
+from PyPDF2 import PdfReader, PdfWriter
+from google.colab import files
+
+# Pobranie pliku
+print("Proszę wybrać plik pdf")
+uploaded = files.upload()
+plik_pdf = next(iter(uploaded))
+
+pdf = PdfReader(plik_pdf)
+
+for i, page in enumerate(pdf.pages):
+    # Obrót strony o 90 stopni w lewo
+    page.rotate(-90)
+
+    writer = PdfWriter()
+    writer.add_page(page)
+
+    with open(f'plik{i+1}.pdf', 'wb') as output_pdf:
+        writer.write(output_pdf)
+        print(f'Oddzielono plik{i+1}')
+        files.download(f'plik{i+1}.pdf')
